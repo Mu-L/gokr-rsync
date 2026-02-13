@@ -35,22 +35,7 @@ func MaybeFileSystem(roDirsOrFiles []string, rwDirs []string) error {
 	log.Printf("setting up landlock ACL (paths ro: %q, paths rw: %q)", roDirs, rwDirs)
 	err := landlock.V3.BestEffort().RestrictPaths(
 		append(re(), []landlock.Rule{
-			// rsync needs /etc/passwd and /etc/group for user/group lookup.
-			//
-			// As of Go 1.24, the net package Go resolver reads
-			// the following DNS configurations files:
-			//
-			// - /etc/resolv.conf
-			// - /etc/hosts
-			// - /etc/services
-			// - /etc/nsswitch.conf
-			//
-			// Because the /etc/resolv.conf file might be re-created (by DHCP
-			// clients, Tailscale, or similar), we need to provide the entire
-			// /etc directory instead of individual files. Otherwise, the
-			// program seems to work at first and then fails DNS resolution
-			// after a while.
-			landlock.RODirs("/etc").IgnoreIfMissing(),
+			landlock.RODirs(defaultRoDirs...).IgnoreIfMissing(),
 			landlock.RODirs(roDirs...).IgnoreIfMissing(),
 			landlock.ROFiles(roFiles...).IgnoreIfMissing(),
 			landlock.RWDirs(rwDirs...).WithRefer(),
