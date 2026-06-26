@@ -13,11 +13,11 @@ RUN echo 'APT::Acquire::Retries "5";' > /etc/apt/apt.conf.d/80retry
 # Install rsync (for running tests).
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    rsync ssh git ca-certificates build-essential golang-go && \
+    rsync ssh git ca-certificates build-essential golang-go bmake zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Build openrsync (for running tests).
 RUN cd /usr/src && \
     git clone https://github.com/kristapsdz/openrsync && \
     cd /usr/src/openrsync && \
-    ./configure && make -j8 && make install
+    ./configure && bmake -j8 && bmake install
