@@ -1,6 +1,7 @@
 package sender
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"os/user"
@@ -87,8 +88,7 @@ func (s *scopedWalker) walk() error {
 		root, err := os.OpenRoot(s.localDir)
 		if err != nil {
 			s.st.Logger.Printf("  OpenRoot(localDir=%q): %v", s.localDir, err)
-			s.ioError(err)
-			return nil
+			return fmt.Errorf("i/o error: requested module path is not accessible")
 		}
 		s.source = newOSRootSource(root)
 		s.fileList.Sources = append(s.fileList.Sources, s.source)
