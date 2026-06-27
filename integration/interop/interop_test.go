@@ -142,6 +142,7 @@ func TestModuleContentsListingDirs(t *testing.T) {
 	// request module content listing
 	rsync := exec.Command(rsynctest.AnyRsync(t),
 		"--dirs",
+		"--list-only",
 		"--port="+srv.Port,
 		"rsync://localhost/interop")
 	rsync.Stdout = testlogger.New(t)

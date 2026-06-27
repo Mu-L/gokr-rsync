@@ -976,7 +976,7 @@ func (o *Options) gokrazyTable() []poptOption {
 		//{"no-backup", "", POPT_ARG_VAL, &o.make_backups, 0},
 		//{"backup-dir", "", POPT_ARG_STRING, &o.backup_dir, 0},
 		//{"suffix", "", POPT_ARG_STRING, &o.backup_suffix, 0},
-		//{"list-only", "", POPT_ARG_VAL, &o.list_only, 2},
+		{"list-only", "", POPT_ARG_VAL, &o.list_only, 2},
 		//{"read-batch", "", POPT_ARG_STRING, &o.batch_name, OPT_READ_BATCH},
 		//{"write-batch", "", POPT_ARG_STRING, &o.batch_name, OPT_WRITE_BATCH},
 		//{"only-write-batch", "", POPT_ARG_STRING, &o.batch_name, OPT_ONLY_WRITE_BATCH},
