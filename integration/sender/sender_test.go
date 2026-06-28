@@ -612,6 +612,53 @@ func TestSenderBothLocalHang(t *testing.T) {
 	}
 }
 
+// like TestSenderBothLocalFile, but with an invocation that used to fail
+// with error message "file has changed mid-transfer" (issue #53).
+func TestSenderPartial257K(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	source := filepath.Join(tmp, "source")
+	dest := filepath.Join(tmp, "dest")
+	want := make([]byte, 1024*257+1)
+
+	if err := os.MkdirAll(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	hello := filepath.Join(source, "hello.txt")
+
+	if err := os.WriteFile(hello, want, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	destFile := filepath.Join(dest, "source", "hello.txt")
+	if err := os.MkdirAll(filepath.Dir(destFile), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destFile, []byte{0}, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	args := []string{
+		"gokr-rsync",
+		"-rv",
+		source,
+		dest,
+	}
+	rsynctest.Run(t, args...)
+
+	{
+		got, err := os.ReadFile(destFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("unexpected file contents: diff (-want +got):\n%s", diff)
+		}
+	}
+}
+
 func TestReceiverCommandDryRun(t *testing.T) {
 	t.Parallel()
 
