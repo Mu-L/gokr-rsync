@@ -352,6 +352,131 @@ func TestReceiverSyncDelete(t *testing.T) {
 	}
 }
 
+func TestReceiverNoPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Windows does not have permission bits")
+	}
+	t.Parallel()
+
+	tmp := t.TempDir()
+	source := filepath.Join(tmp, "source")
+	dest := filepath.Join(tmp, "dest")
+
+	if err := os.MkdirAll(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sourcesub := filepath.Join(source, "subdir")
+	if err := os.MkdirAll(sourcesub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// The explicit Chmod does not apply umask,
+	// whereas MkdirAll does apply umask.
+	if err := os.Chmod(sourcesub, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	mtime, err := time.Parse(time.RFC3339, "2009-11-10T23:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	createRegular := func(fn string, perm os.FileMode) {
+		if err := os.WriteFile(fn, []byte("hello"), perm); err != nil {
+			t.Fatal(err)
+		}
+		// The explicit Chmod does not apply umask,
+		// whereas WriteFile does apply umask.
+		if err := os.Chmod(fn, perm); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(fn, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, fn := range []string{"new.txt", "existing.txt"} {
+		createRegular(filepath.Join(source, fn), 0666)
+	}
+
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create existing.txt in the destination directly as well,
+	// but with stricter permissions.
+	createRegular(filepath.Join(dest, "existing.txt"), 0600)
+
+	// Create subdir in the destination directly as well,
+	// but with stricter permissions.
+	destsub := filepath.Join(dest, "subdir")
+	if err := os.MkdirAll(destsub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(destsub, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	// start a server to sync from
+	srv := rsynctest.NewInMemory(t, rsyncd.Module{
+		Name: "interop",
+		Path: source,
+	})
+	args := []string{"-rlt"} // no -p (--perms)
+	srv.RunClient(t, args, "./", []string{dest})
+
+	{
+		want := []byte("hello")
+		got, err := os.ReadFile(filepath.Join(dest, "new.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("unexpected file contents: diff (-want +got):\n%s", diff)
+		}
+	}
+
+	// Existing files and directories are expected to keep their permissions.
+	destexisting := filepath.Join(dest, "existing.txt")
+	st, err := os.Lstat(destexisting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := st.Mode().Perm(), os.FileMode(0600); got != want {
+		t.Errorf("%s: unexpected permissions: got %v, want %v", destexisting, got, want)
+	}
+
+	st, err = os.Lstat(destsub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := st.Mode().Perm(), os.FileMode(0700); got != want {
+		t.Errorf("%s: unexpected permissions: got %v, want %v", destsub, got, want)
+	}
+
+	// Newly transferred files are expected to get created with
+	// the sender’s mode (e.g. 0666), applying the process umask (e.g. 022),
+	// resulting in 0644 (-rw-r--r--).
+	destprobe := filepath.Join(dest, "new_permprobe.txt")
+	if err := os.WriteFile(destprobe, []byte(nil), 0666); err != nil {
+		t.Fatal(err)
+	}
+	st, err = os.Lstat(destprobe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := st.Mode().Perm()
+	destnew := filepath.Join(dest, "new.txt")
+	st, err = os.Lstat(destnew)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := st.Mode().Perm(); got != want {
+		t.Errorf("%s: unexpected permissions: got %v, want %v", destnew, got, want)
+	}
+}
+
 func TestReceiverAlwaysChecksum(t *testing.T) {
 	t.Parallel()
 

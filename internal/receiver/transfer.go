@@ -1,6 +1,7 @@
 package receiver
 
 import (
+	"io/fs"
 	"os"
 
 	"github.com/gokrazy/rsync/internal/log"
@@ -51,6 +52,7 @@ type Transfer struct {
 	Users           map[int32]mapping
 	Groups          map[int32]mapping
 	retouchDirPerms bool
+	defaultPerms    fs.FileMode
 }
 
 func (rt *Transfer) listOnly() bool { return rt.Dest == "" }

@@ -12,14 +12,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (rt *Transfer) createDevice(f *File, st fs.FileInfo) error {
+func (rt *Transfer) createDevice(f *File, st fs.FileInfo, perm fs.FileMode) error {
 	base := filepath.Base(f.Name)
 	parentDir, err := rt.DestRoot.OpenFile(filepath.Dir(f.Name), 0, 0)
 	if err != nil {
 		return fmt.Errorf("Open(parent(%s)): %v", f.Name, err)
 	}
 	defer parentDir.Close()
-	perm := fs.FileMode(f.Mode) & os.ModePerm
 	mode := f.Mode & rsync.S_IFMT
 	switch mode {
 	case rsync.S_IFCHR:

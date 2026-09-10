@@ -10,9 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (rt *Transfer) createDevice(f *File, st fs.FileInfo) error {
+func (rt *Transfer) createDevice(f *File, st fs.FileInfo, perm fs.FileMode) error {
 	local := filepath.Join(rt.Dest, f.Name)
-	perm := fs.FileMode(f.Mode) & os.ModePerm
 	mode := f.Mode & rsync.S_IFMT
 	switch mode {
 	case rsync.S_IFCHR:

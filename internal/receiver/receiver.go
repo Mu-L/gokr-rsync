@@ -67,6 +67,12 @@ func (rt *Transfer) recvFile1(f *File) error {
 		return nil
 	}
 
+	st, err := rt.DestRoot.Lstat(f.Name)
+	if err != nil || !st.Mode().IsRegular() {
+		st = nil
+	}
+	perm := rt.destPerm(f, st)
+
 	if rt.Opts.KeepPartial {
 		// Use the partial file, if any, to construct the destination,
 		// regardless of whether the localFile exists.
@@ -79,7 +85,7 @@ func (rt *Transfer) recvFile1(f *File) error {
 		if err == nil {
 			// partial file exists; use it.
 			defer partial.Close()
-			if err := rt.receiveData(f, partial); err != nil {
+			if err := rt.receiveData(f, partial, perm); err != nil {
 				return err
 			}
 			// receiveData called partial.Close()
@@ -96,7 +102,7 @@ func (rt *Transfer) recvFile1(f *File) error {
 		rt.Logger.Printf("opening local file failed, continuing: %v", err)
 	}
 	defer localFile.Close()
-	if err := rt.receiveData(f, localFile); err != nil {
+	if err := rt.receiveData(f, localFile, perm); err != nil {
 		return err
 	}
 	return nil
@@ -121,17 +127,11 @@ func (rt *Transfer) openLocalFile(f *File) (*os.File, error) {
 		return nil, nil
 	}
 
-	if !rt.Opts.PreservePerms {
-		// If the file exists already and we are not preserving permissions,
-		// then act as though the remote sent us the existing permissions:
-		f.Mode = int32(st.Mode().Perm())
-	}
-
 	return in, nil
 }
 
 // rsync/receiver.c:receive_data
-func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
+func (rt *Transfer) receiveData(f *File, localFile *os.File, perm fs.FileMode) error {
 	rt.Progress.Reset(uint64(f.Length))
 	var sh rsync.SumHead
 	if err := sh.ReadFrom(rt.Conn); err != nil {
@@ -225,7 +225,7 @@ func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
 		return err
 	}
 
-	if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
+	if err := rt.setPerms(f, perm); err != nil {
 		return err
 	}
 

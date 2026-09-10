@@ -56,7 +56,7 @@ func (rt *Transfer) touchUpDirs(fileList []*File) error {
 		if rt.Opts.DebugGTE(rsyncopts.DEBUG_TIME, 2) {
 			rt.Logger.Printf("touchUpDirs: %s (%d)", f.Name, idx)
 		}
-		mode := fs.FileMode(f.Mode)
+		mode := fs.FileMode(f.Mode) // FIXME
 		if mode&rsync.S_IFMT != rsync.S_IFDIR {
 			continue // not a directory
 		}
@@ -103,7 +103,7 @@ func modTimeEqual(a, b time.Time) bool {
 }
 
 // rsync/rsync.c:set_perms
-func (rt *Transfer) setPerms(f *File, mode fs.FileMode) error {
+func (rt *Transfer) setPerms(f *File, perm fs.FileMode) error {
 	if rt.Opts.DryRun {
 		return nil
 	}
@@ -113,10 +113,9 @@ func (rt *Transfer) setPerms(f *File, mode fs.FileMode) error {
 		return err
 	}
 
-	perm := mode & os.ModePerm
-	mode = mode & rsync.S_IFMT
+	isLink := f.Mode&rsync.S_IFMT == rsync.S_IFLNK
 	if rt.Opts.PreserveTimes &&
-		mode != rsync.S_IFLNK &&
+		!isLink &&
 		!modTimeEqual(st.ModTime(), f.ModTime) {
 		if err := rt.DestRoot.Chtimes(f.Name, f.ModTime, f.ModTime); err != nil {
 			return err
@@ -128,7 +127,7 @@ func (rt *Transfer) setPerms(f *File, mode fs.FileMode) error {
 		return err
 	}
 
-	if mode != rsync.S_IFLNK {
+	if !isLink {
 		if st.Mode().Perm() != perm { // only call Chmod if the permissions actually differ
 			if err := rt.DestRoot.Chmod(f.Name, perm); err != nil {
 				return err
@@ -169,8 +168,12 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 			}
 			err = fmt.Errorf("file removed")
 		}
+		var destSt os.FileInfo
+		if err == nil {
+			destSt = st
+		}
+		perm := rt.destPerm(f, destSt)
 		if err != nil {
-			perm := fs.FileMode(f.Mode) & os.ModePerm
 			if rt.Opts.DebugGTE(rsyncopts.DEBUG_GENR, 1) {
 				rt.Logger.Printf("MkdirAll(%s, %v)", f.Name, perm)
 			}
@@ -180,20 +183,25 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 			}
 			// fallthrough to setPerms and return nil
 		}
-		mode := fs.FileMode(f.Mode)
-		if mode&syscall.S_IWUSR == 0 {
+		if perm&syscall.S_IWUSR == 0 {
 			// The directory is lacking write permission,
 			// so we need to create it writeable as long as
 			// we are creating files inside that directory.
 			// GenerateFiles will fix permissions afterwards.
 			rt.retouchDirPerms = true
-			mode |= syscall.S_IWUSR
+			perm |= syscall.S_IWUSR
 		}
-		if err := rt.setPerms(f, mode); err != nil {
+		if err := rt.setPerms(f, perm); err != nil {
 			return err
 		}
 		return nil
 	}
+
+	var destSt os.FileInfo
+	if err == nil && !st.IsDir() {
+		destSt = st
+	}
+	perm := rt.destPerm(f, destSt)
 
 	if rt.Opts.PreserveLinks && mode == rsync.S_IFLNK {
 		// TODO: safe_symlinks option
@@ -204,7 +212,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 					rt.Logger.Printf("existing target: %q", target)
 				}
 				if target == f.LinkTarget {
-					if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
+					if err := rt.setPerms(f, perm); err != nil {
 						return err
 					}
 					return nil // skip
@@ -219,7 +227,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 		if err := symlink(rt.DestRoot, f.LinkTarget, f.Name); err != nil {
 			return err
 		}
-		if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
+		if err := rt.setPerms(f, perm); err != nil {
 			return err
 		}
 		return nil
@@ -229,7 +237,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 		mode == rsync.S_IFBLK ||
 		mode == rsync.S_IFSOCK ||
 		mode == rsync.S_IFIFO) {
-		if err := rt.createDevice(f, st); err != nil {
+		if err := rt.createDevice(f, st, perm); err != nil {
 			return err
 		}
 		return nil
@@ -299,7 +307,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 		if rt.Opts.InfoGTE(rsyncopts.INFO_SKIP, 1) {
 			rt.Logger.Printf("skipping %s", local)
 		}
-		if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
+		if err := rt.setPerms(f, perm); err != nil {
 			return err
 		}
 		return nil
