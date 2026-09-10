@@ -95,8 +95,8 @@ func (rt *Transfer) Do(c *rsyncwire.Conn, fileList []*File, noReport bool) (*rsy
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
-	if rt.retouchDirPerms /* || rt.retouchDirTimes */ {
-		if err := rt.touchUpDirs(fileList); err != nil {
+	if len(rt.retouchDirs) > 0 /* || rt.retouchDirTimes */ {
+		if err := rt.touchUpDirs(); err != nil {
 			return nil, err
 		}
 	}

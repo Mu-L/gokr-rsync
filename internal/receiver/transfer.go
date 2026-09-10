@@ -46,13 +46,18 @@ type Transfer struct {
 	Progress progress.Printer
 
 	// state
-	Conn            *rsyncwire.Conn
-	Seed            int32
-	IOErrors        int32
-	Users           map[int32]mapping
-	Groups          map[int32]mapping
-	retouchDirPerms bool
-	defaultPerms    fs.FileMode
+	Conn         *rsyncwire.Conn
+	Seed         int32
+	IOErrors     int32
+	Users        map[int32]mapping
+	Groups       map[int32]mapping
+	defaultPerms fs.FileMode
+	retouchDirs  []retouchDir
+}
+
+type retouchDir struct {
+	f    *File
+	perm fs.FileMode
 }
 
 func (rt *Transfer) listOnly() bool { return rt.Dest == "" }

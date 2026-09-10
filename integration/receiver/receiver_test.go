@@ -395,7 +395,7 @@ func TestReceiverNoPermissions(t *testing.T) {
 		}
 	}
 
-	for _, fn := range []string{"new.txt", "existing.txt"} {
+	for _, fn := range []string{"new.txt", "existing.txt", "subdir/dummy.txt"} {
 		createRegular(filepath.Join(source, fn), 0666)
 	}
 
@@ -413,9 +413,10 @@ func TestReceiverNoPermissions(t *testing.T) {
 	if err := os.MkdirAll(destsub, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(destsub, 0700); err != nil {
+	if err := os.Chmod(destsub, 0500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { os.Chmod(destsub, 0700) })
 
 	// start a server to sync from
 	srv := rsynctest.NewInMemory(t, rsyncd.Module{
@@ -436,6 +437,10 @@ func TestReceiverNoPermissions(t *testing.T) {
 		}
 	}
 
+	if _, err := os.ReadFile(filepath.Join(dest, "subdir/dummy.txt")); err != nil {
+		t.Fatal(err)
+	}
+
 	// Existing files and directories are expected to keep their permissions.
 	destexisting := filepath.Join(dest, "existing.txt")
 	st, err := os.Lstat(destexisting)
@@ -450,7 +455,7 @@ func TestReceiverNoPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := st.Mode().Perm(), os.FileMode(0700); got != want {
+	if got, want := st.Mode().Perm(), os.FileMode(0500); got != want {
 		t.Errorf("%s: unexpected permissions: got %v, want %v", destsub, got, want)
 	}
 

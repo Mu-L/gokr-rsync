@@ -51,22 +51,12 @@ func (rt *Transfer) GenerateFiles(fileList []*File) error {
 	return nil
 }
 
-func (rt *Transfer) touchUpDirs(fileList []*File) error {
-	for idx, f := range fileList {
+func (rt *Transfer) touchUpDirs() error {
+	for _, d := range rt.retouchDirs {
 		if rt.Opts.DebugGTE(rsyncopts.DEBUG_TIME, 2) {
-			rt.Logger.Printf("touchUpDirs: %s (%d)", f.Name, idx)
+			rt.Logger.Printf("touchUpDirs: %s (%v)", d.f.Name, d.perm)
 		}
-		mode := fs.FileMode(f.Mode) // FIXME
-		if mode&rsync.S_IFMT != rsync.S_IFDIR {
-			continue // not a directory
-		}
-		if rt.Opts.DryRun {
-			continue
-		}
-		if mode&syscall.S_IWUSR > 0 {
-			continue // directory is writeable, no touchup needed
-		}
-		if err := rt.setPerms(f, mode); err != nil {
+		if err := rt.setPerms(d.f, d.perm); err != nil {
 			return err
 		}
 	}
@@ -188,7 +178,10 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 			// so we need to create it writeable as long as
 			// we are creating files inside that directory.
 			// GenerateFiles will fix permissions afterwards.
-			rt.retouchDirPerms = true
+			rt.retouchDirs = append(rt.retouchDirs, retouchDir{
+				f:    f,
+				perm: perm,
+			})
 			perm |= syscall.S_IWUSR
 		}
 		if err := rt.setPerms(f, perm); err != nil {
